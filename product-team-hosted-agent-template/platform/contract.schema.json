@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/schemas/foundry-hosted-agent-contract-v1.json",
+  "title": "Proposed enterprise Foundry Hosted Agent Repository Contract v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contractVersion",
+    "agent",
+    "runtime",
+    "governance",
+    "release"
+  ],
+  "properties": {
+    "contractVersion": {
+      "const": "1.0"
+    },
+    "agent": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "ownerTeam",
+        "supportContact"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9-]{2,62}$"
+        },
+        "ownerTeam": {
+          "type": "string",
+          "minLength": 1
+        },
+        "supportContact": {
+          "type": "string",
+          "minLength": 3
+        }
+      }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "protocol",
+        "packaging",
+        "sourcePath",
+        "dockerfile"
+      ],
+      "properties": {
+        "kind": {
+          "const": "foundry-hosted"
+        },
+        "protocol": {
+          "const": "responses"
+        },
+        "packaging": {
+          "const": "container"
+        },
+        "sourcePath": {
+          "const": "src/agent"
+        },
+        "dockerfile": {
+          "const": "src/agent/Dockerfile"
+        }
+      }
+    },
+    "governance": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "dataClassification",
+        "approvedModelAlias",
+        "requiredConnections",
+        "outboundDestinations"
+      ],
+      "properties": {
+        "dataClassification": {
+          "enum": [
+            "internal",
+            "confidential",
+            "restricted"
+          ]
+        },
+        "approvedModelAlias": {
+          "const": "approved-chat"
+        },
+        "requiredConnections": {
+          "type": "array",
+          "maxItems": 0
+        },
+        "outboundDestinations": {
+          "type": "array",
+          "maxItems": 0
+        }
+      }
+    },
+    "release": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "environments",
+        "smokePrompt",
+        "evaluationDataset"
+      ],
+      "properties": {
+        "environments": {
+          "const": [
+            "dev",
+            "test",
+            "prod"
+          ]
+        },
+        "smokePrompt": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evaluationDataset": {
+          "type": "string",
+          "const": "tests/evaluations/smoke.json"
+        }
+      }
+    }
+  }
+}

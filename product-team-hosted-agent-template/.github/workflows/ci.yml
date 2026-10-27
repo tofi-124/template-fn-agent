@@ -1,0 +1,14 @@
+name: Foundry agent - Pull Request CI
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  quality:
+    # Replace YOUR-ORG and @v2 with approved version / commit SHA.
+    uses: YOUR-ORG/ai-platform-reusable-workflows/.github/workflows/ci-hosted-agent.yml@v2
+    with:
+      agent_name: sample-hosted-agent

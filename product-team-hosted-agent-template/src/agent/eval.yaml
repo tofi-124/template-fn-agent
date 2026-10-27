@@ -1,0 +1,15 @@
+# First-time setup requires review/registration of evaluation assets.
+# The evaluator judge model must exist in your Foundry project.
+# See: https://learn.microsoft.com/en-us/azure/foundry/observability/quickstarts/quickstart-evaluate-hosted-agent
+name: agent-eval
+agent:
+  name: sample-hosted-agent
+  kind: hosted
+dataset:
+  local_uri: tests/queries.jsonl
+evaluators:
+  - builtin.intent_resolution
+  - builtin.task_adherence
+options:
+  eval_model: REPLACE_WITH_APPROVED_JUDGE_MODEL
+max_samples: 10

@@ -1,0 +1,43 @@
+name: Foundry agent - gated release
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  validate:
+    uses: YOUR-ORG/ai-platform-reusable-workflows/.github/workflows/ci-hosted-agent.yml@v2
+    with:
+      agent_name: sample-hosted-agent
+  build:
+    needs: validate
+    # Platform-managed immutable ACR image; OIDC scoped to GitHub environment "build".
+    uses: YOUR-ORG/ai-platform-reusable-workflows/.github/workflows/build-hosted-agent.yml@v2
+    with:
+      agent_name: sample-hosted-agent
+  dev:
+    needs: build
+    uses: YOUR-ORG/ai-platform-reusable-workflows/.github/workflows/deploy-hosted-agent.yml@v2
+    with:
+      agent_name: sample-hosted-agent
+      environment: dev
+      image_uri: ${{ needs.build.outputs.image_uri }}
+  test:
+    needs: [build, dev]
+    # Test and Prod require deliberate manual release; environments enforce approval.
+    if: github.event_name == 'workflow_dispatch'
+    uses: YOUR-ORG/ai-platform-reusable-workflows/.github/workflows/deploy-hosted-agent.yml@v2
+    with:
+      agent_name: sample-hosted-agent
+      environment: test
+      image_uri: ${{ needs.build.outputs.image_uri }}
+  prod:
+    needs: [build, test]
+    if: github.event_name == 'workflow_dispatch'
+    uses: YOUR-ORG/ai-platform-reusable-workflows/.github/workflows/deploy-hosted-agent.yml@v2
+    with:
+      agent_name: sample-hosted-agent
+      environment: prod
+      image_uri: ${{ needs.build.outputs.image_uri }}

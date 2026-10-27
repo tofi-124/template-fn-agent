@@ -1,0 +1,14 @@
+name: Live hosted-agent evaluation gate
+description: Runs fixed product-provided test prompts against deployed agent with central evaluator.
+inputs:
+  dataset:
+    required: true
+    description: Path to evaluation dataset in checked out product repository
+runs:
+  using: composite
+  steps:
+    - name: Invoke deployed agent and enforce live response gate
+      shell: bash
+      env:
+        DATASET_PATH: ${{ inputs.dataset }}
+      run: python "$GITHUB_ACTION_PATH/evaluate_agent.py" "$DATASET_PATH"

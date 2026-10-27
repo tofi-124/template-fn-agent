@@ -1,0 +1,12 @@
+{
+  "schemaVersion": "1.0",
+  "description": "Demonstration deterministic smoke-evaluation. Replace with meaningful risk/evaluation suites before production.",
+  "minimumPassRate": 1.0,
+  "cases": [
+    {
+      "id": "readiness-token",
+      "prompt": "Give your pipeline readiness confirmation.",
+      "contains": "READY_FOR_EVALUATION"
+    }
+  ]
+}

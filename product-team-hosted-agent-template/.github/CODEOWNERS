@@ -1,0 +1,5 @@
+# Replace these teams with real GitHub organization team slugs.
+* @YOUR-ORG/example-product-team
+/platform/contract.yaml @YOUR-ORG/ai-platform @YOUR-ORG/example-product-team
+/azure.yaml @YOUR-ORG/ai-platform @YOUR-ORG/example-product-team
+/.github/workflows/ @YOUR-ORG/ai-platform

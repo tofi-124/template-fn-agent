@@ -1,0 +1,36 @@
+name: Platform - CI validation and security
+on:
+  workflow_call:
+    inputs:
+      agent_name:
+        required: true
+        type: string
+permissions:
+  contents: read
+jobs:
+  policy-and-tests:
+    runs-on: ubuntu-latest # Private package networks may require self-hosted runners.
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Validate enterprise-owned contract
+        uses: $/.github/actions/validate-hosted-agent
+        with:
+          agent_name: ${{ inputs.agent_name }}
+      - name: Install CI analyzers
+        run: python -m pip install 'ruff>=0.13,<1' 'bandit>=1.8,<2' 'pytest>=8,<10' 'PyYAML>=6,<7'
+      - name: Ruff lint (block release on violations)
+        run: ruff check src/agent tests
+      - name: Bandit static security checks (block release)
+        run: bandit -r src/agent -q
+      - name: Product test suite
+        run: python -m pytest -q tests
+      - name: Confirm evaluation dataset is structured
+        run: python -m json.tool tests/evaluations/smoke.json >/dev/null
+      - name: Build AMD64 agent image, without publishing
+        run: docker build --platform linux/amd64 -f src/agent/Dockerfile src/agent
+      # Enterprise hook: add approved dependency/SBOM scanners if org policy requires them.
+      # Runtime / LLM quality evaluation occurs AFTER deployment in deploy-hosted-agent.yml.

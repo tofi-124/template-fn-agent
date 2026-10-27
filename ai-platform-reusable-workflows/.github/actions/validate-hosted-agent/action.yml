@@ -1,0 +1,22 @@
+name: Validate Foundry hosted-agent contract
+description: Platform-owned policy checks for product repos (GitHub.com $/ action resolution)
+inputs:
+  agent_name:
+    description: Expected agent identity from calling workflow
+    required: true
+  environment:
+    description: Optional target environment
+    required: false
+    default: ""
+runs:
+  using: composite
+  steps:
+    - name: Install validator dependency
+      shell: bash
+      run: python -m pip install --disable-pip-version-check 'PyYAML==6.0.3'
+    - name: Validate manifest and repo contract
+      shell: bash
+      env:
+        EXPECTED_AGENT_NAME: ${{ inputs.agent_name }}
+        TARGET_ENVIRONMENT: ${{ inputs.environment }}
+      run: python "$GITHUB_ACTION_PATH/validate_contract.py" "$EXPECTED_AGENT_NAME" "$TARGET_ENVIRONMENT"

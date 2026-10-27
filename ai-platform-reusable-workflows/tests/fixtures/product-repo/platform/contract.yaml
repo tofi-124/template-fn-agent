@@ -1,0 +1,21 @@
+# Proposed enterprise contract, NOT a Microsoft built-in API schema.
+contractVersion: "1.0"
+agent:
+  name: sample-hosted-agent
+  ownerTeam: example-product-team
+  supportContact: example-product-team@example.com
+runtime:
+  kind: foundry-hosted
+  protocol: responses
+  packaging: container
+  sourcePath: src/agent
+  dockerfile: src/agent/Dockerfile
+governance:
+  dataClassification: internal # internal | confidential | restricted
+  approvedModelAlias: approved-chat
+  requiredConnections: []
+  outboundDestinations: []
+release:
+  environments: [dev, test, prod]
+  smokePrompt: "Give your pipeline readiness confirmation."
+  evaluationDataset: tests/evaluations/smoke.json

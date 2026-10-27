@@ -1,0 +1,125 @@
+name: Platform - deploy, smoke, evaluate and approve
+on:
+  workflow_call:
+    inputs:
+      agent_name:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      image_uri:
+        required: true
+        type: string
+permissions:
+  contents: read
+  id-token: write
+jobs:
+  deploy:
+    # GitHub environment protection + OIDC federated trust are mandatory for prod.
+    runs-on: ubuntu-latest # Replace with approved VNet-connected runner if private.
+    environment: ${{ inputs.environment }}
+    concurrency:
+      group: foundry-release-${{ github.repository }}-${{ inputs.agent_name }}-${{ inputs.environment }}
+      cancel-in-progress: false
+    env:
+      DEPLOY_ENV: ${{ inputs.environment }}
+      AGENT_NAME: ${{ inputs.agent_name }}
+      AGENT_IMAGE: ${{ inputs.image_uri }}
+      ACR_LOGIN_SERVER: ${{ vars.ACR_LOGIN_SERVER }}
+      FOUNDRY_PROJECT_ENDPOINT: ${{ vars.FOUNDRY_PROJECT_ENDPOINT }}
+      AZURE_AI_MODEL_DEPLOYMENT_NAME: ${{ vars.AZURE_AI_MODEL_DEPLOYMENT_NAME }}
+      AZURE_LOCATION: ${{ vars.AZURE_LOCATION }}
+      AZURE_SUBSCRIPTION_ID: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      AZURE_TENANT_ID: ${{ vars.AZURE_TENANT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Enforce centrally managed contract
+        uses: $/.github/actions/validate-hosted-agent
+        with:
+          agent_name: ${{ inputs.agent_name }}
+          environment: ${{ inputs.environment }}
+      - name: Verify allowed environment and image provenance
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$DEPLOY_ENV" =~ ^(dev|test|prod)$ ]] || exit 1
+          [[ "$GITHUB_REF" == 'refs/heads/main' ]] || exit 1
+          [[ -n "$ACR_LOGIN_SERVER" && -n "$FOUNDRY_PROJECT_ENDPOINT" && -n "$AZURE_AI_MODEL_DEPLOYMENT_NAME" ]] || exit 1
+          [[ "$AGENT_IMAGE" =~ ^[^[:space:]]+@sha256:[0-9a-f]{64}$ ]] || exit 1
+          [[ "$AGENT_IMAGE" == "$ACR_LOGIN_SERVER/hosted-agents/$AGENT_NAME@"* ]] || exit 1
+          echo "Validated immutable image in approved registry for ${DEPLOY_ENV}."
+      - name: Block prod until deployment/version-pinning safety is designed
+        if: inputs.environment == 'prod'
+        shell: bash
+        env:
+          PROD_TRAFFIC_PINNING_VERIFIED: ${{ vars.PROD_TRAFFIC_PINNING_VERIFIED }}
+          FOUNDRY_EVAL_REQUIRED: ${{ vars.FOUNDRY_EVAL_REQUIRED }}
+        run: |
+          set -euo pipefail
+          [[ "$PROD_TRAFFIC_PINNING_VERIFIED" == 'true' ]] || { echo '::error::Production agent version routing is not implemented by this starter. Establish and test pinning/rollback controls before enabling prod.'; exit 1; }
+          [[ "$FOUNDRY_EVAL_REQUIRED" == 'true' ]] || { echo '::error::Native Microsoft Foundry evaluation must be enabled for prod.'; exit 1; }
+      - name: Authenticate to environment-scoped Azure identity (OIDC)
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+      - name: Install Azure Developer CLI
+        uses: Azure/setup-azd@v2
+      - name: Install Foundry CLI extensions
+        run: azd ext install microsoft.foundry
+      - name: Configure existing Foundry project (NO azd provision)
+        shell: bash
+        run: |
+          set -euo pipefail
+          azd config set auth.useAzCliAuth true
+          azd config set defaults.subscription "$AZURE_SUBSCRIPTION_ID"
+          azd env select "$DEPLOY_ENV" || azd env new "$DEPLOY_ENV" --no-prompt
+          azd env set AZURE_SUBSCRIPTION_ID "$AZURE_SUBSCRIPTION_ID"
+          azd env set AZURE_TENANT_ID "$AZURE_TENANT_ID"
+          azd env set AZURE_LOCATION "$AZURE_LOCATION"
+          azd env set FOUNDRY_PROJECT_ENDPOINT "$FOUNDRY_PROJECT_ENDPOINT"
+          azd env set AZURE_AI_MODEL_DEPLOYMENT_NAME "$AZURE_AI_MODEL_DEPLOYMENT_NAME"
+          azd env set AGENT_IMAGE "$AGENT_IMAGE"
+          azd env set AZD_AGENT_SKIP_ACR true
+      - name: Deploy exact tested container digest as new hosted-agent version
+        shell: bash
+        run: azd deploy --no-prompt
+      - name: Inspect resulting hosted agent version
+        shell: bash
+        run: azd ai agent show --no-prompt
+      - name: Run live post-deployment agent evaluation gate
+        uses: $/.github/actions/evaluate-hosted-agent
+        with:
+          dataset: tests/evaluations/smoke.json
+      - name: Verify managed-evaluation and production safety policy
+        shell: bash
+        env:
+          FOUNDRY_EVAL_REQUIRED: ${{ vars.FOUNDRY_EVAL_REQUIRED }}
+          PROD_TRAFFIC_PINNING_VERIFIED: ${{ vars.PROD_TRAFFIC_PINNING_VERIFIED }}
+        run: |
+          set -euo pipefail
+          if [[ "$DEPLOY_ENV" == 'prod' ]]; then
+            [[ "$PROD_TRAFFIC_PINNING_VERIFIED" == 'true' ]] || { echo '::error::Production requires verified endpoint version pinning / rollback before azd deploy. This sample cannot establish it automatically.'; exit 1; }
+            [[ "$FOUNDRY_EVAL_REQUIRED" == 'true' ]] || { echo '::error::Production requires native Foundry quality evaluation.'; exit 1; }
+          fi
+      - name: Native Microsoft Foundry evaluation quality gate (preview)
+        if: vars.FOUNDRY_EVAL_REQUIRED == 'true'
+        uses: $/.github/actions/evaluate-foundry-quality
+        with:
+          config: eval.yaml
+          minimum-pass-rate: '0.90'
+      - name: Write release audit summary
+        shell: bash
+        run: |
+          echo "### Foundry hosted-agent release" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Environment: $DEPLOY_ENV" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Agent: $AGENT_NAME" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Commit: $GITHUB_SHA" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Immutable image: $AGENT_IMAGE" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Approval: governed by GitHub Environment controls" >> "$GITHUB_STEP_SUMMARY"
+      # NOTE: A successful azd deploy creates an agent version, but does not prove
+      # the application's clients have safely switched to it. See onboarding doc.
+      # Pending org-specific integration: publish/route traffic, pin stable version, rollback,
+      # Azure Monitor evaluation telemetry, Agent 365 publication, connection entitlement checks.
